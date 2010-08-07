@@ -67,8 +67,9 @@ class GetOrkutUserInfo {
 		$exec = $this->orkutApi->execute();
 
 		if(isset($exec['self']['error']))
-			GenericError::stop(1,$result['self']['error']['message']);
+			GenericError::stop(1,$exec['self']['error']['message']);
 		
+		$result = array();
 		$result[] = array('id'=>'0','message'=>'ok');
 		$result[] = $exec;
 
