@@ -1,30 +1,10 @@
 <?php
-/*
- * Copyright 2010 - Robson Dantas <biu.dantas@gmail.com>
- * 
- * This file is based on opensocial-client-libraries 3legged implementation, create by
- * Google. More info can be found on: http://code.google.com/p/opensocial-php-client/
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 require_once("external/OAuth.php");
 
-// see TODO.txt for a list of missing features.
-
 class CurlRequest {
 
-	public static function send($url, $method, $postBody = false, $headers = false, $ua = 'os-php-3legged 0.1') {
+	public static function send($url, $method, $postBody = false, $headers = false, $ua = 'osapi 1.0') {
 
 		$ch = curl_init();
 
@@ -35,7 +15,8 @@ class CurlRequest {
 			'headers' => $headers
 		);
 
-		// log here		
+		// log here
+		//echo $request;
 
 		curl_setopt($ch, CURLOPT_URL, $url);
 
@@ -78,8 +59,8 @@ class CurlRequest {
 
 		$response = array('http_code' => $http_code, 'data' => $response_body, 'headers' => $headers);
 
-		
-		// log info here?
+		//log here		
+		//echo $response;
 
 		return $response;
 	}
@@ -119,32 +100,33 @@ class OrkutAuth {
 			$this->accessToken = $this->getAccessToken();
 		}
 		else {
+
 			// first step, nothing set, start dancing
-			if(!isset($_GET['oauth_continue'])) {
+			if(!isset($_GET['oauth_verifier']) && !isset($_GET['oauth_token'])) {
 
 				//setup the callback url, so we can go back further
 				$callbackUrl = 'http://'. $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 
 				// get request token
         			$token = $this->obtainRequestToken($callbackUrl);
-			        //$callbackUrl .= (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'oauth_continue=1&token=' . $token->key . '&key=' . urldecode($token->secret);
-			        $callbackUrl .= (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'oauth_continue=1';
-
+			        
 				// change, instead of passing through url
 				$_SESSION['orkut_key'] = $token->key;
 				$_SESSION['orkut_secret'] = $token->secret;
 
 				// now we can redirect
-				$authorizeRedirect = self::AUTHORIZE_URL . "?oauth_token={$token->key}&oauth_callback=" . urlencode($callbackUrl);
+				$authorizeRedirect = self::AUTHORIZE_URL . "?oauth_token={$token->key}";
 				header("Location: $authorizeRedirect");
 
 				
 			}
 			// ok, now we are almost done, just upgrade request token and redirect
 			else {
+
 				$this->upgradeRequestToken($_SESSION['orkut_key'], $_SESSION['orkut_secret']);
+
+				// ok, finally we are ready to go.
 				$_SESSION['oauth_token'] = serialize($this->accessToken);
-				$originalUrl = $_SESSION['oauth_callback'];
 
 				// unset session stuff
 				$_SESSION['orkut_key']=NULL;
@@ -154,7 +136,7 @@ class OrkutAuth {
 				unset($_SESSION['orkut_secret']);
 
 
-				header("Location: $originalUrl");
+				//header("Location: $originalUrl");
 			}
 		}
 
@@ -169,8 +151,9 @@ class OrkutAuth {
 			@parse_str($ret['data'], $matches);
 
 			if (!isset($matches['oauth_token']) || !isset($matches['oauth_token_secret'])) {
-				throw new Exception("Error authorizing access key (result was: {$ret['data']})");
+				throw new osapiException("Error authorizing access key (result was: {$ret['data']})");
 			}
+
 			// The token was upgraded to an access token, we can now continue to use it.
 			$this->accessToken = new OAuthConsumer(urldecode($matches['oauth_token']), urldecode($matches['oauth_token_secret']));
 			return $this->accessToken;
@@ -182,13 +165,14 @@ class OrkutAuth {
 
 	protected function requestAccessToken($requestToken, $requestTokenSecret) {
 		$accessToken = new OAuthConsumer($requestToken, $requestTokenSecret);
-		$accessRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, $accessToken, "GET", self::ACCESS_TOKEN_URL, array());
+		$accessRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, $accessToken, 'GET', self::ACCESS_TOKEN_URL, array());
+		$accessRequest->set_parameter('oauth_verifier',$_GET['oauth_verifier']);
 		$accessRequest->sign_request($this->signature, $this->consumerToken, $accessToken);
 		return CurlRequest::send($accessRequest, 'GET', false, false);
 	}
 	
 
-
+	// need to improve this function, allowing to read from other sources.
 	protected function getAccessToken() {
 		if(isset($_SESSION["oauth_token"]))
 			return unserialize($_SESSION["oauth_token"]);
@@ -198,19 +182,17 @@ class OrkutAuth {
 
 	protected function obtainRequestToken($callbackUrl) {
 
-		$_SESSION['oauth_callback'] = $callbackUrl;
-		$ret = $this->requestRequestToken();
-//		die("");
+		$ret = $this->requestRequestToken($callbackUrl);
 
 		if ($ret['http_code'] == '200') {
 
-			$matches = array();
-			preg_match('/oauth_token=(.*)&oauth_token_secret=(.*)/', $ret['data'], $matches);
-			if (!is_array($matches) || count($matches) != 3) {
+			parse_str($ret['data'], $str);
+			
+			if (count($str) != 3) {
 				throw new Exception("Error retrieving request key ({$ret['data']})");	
 			}
 
-			return new OAuthToken(urldecode($matches[1]), urldecode($matches[2]));
+			return new OAuthToken(urldecode($str['oauth_token']), urldecode($str['oauth_token_secret']));
 
 		} 
 		else {
@@ -218,11 +200,14 @@ class OrkutAuth {
 		}
 	}
 
-	protected function requestRequestToken() {
+	protected function requestRequestToken($callbackUrl) {
 		$requestTokenRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, NULL, "GET", self::REQUEST_TOKEN_URL, $this->oauthRequestTokenParams);
 		foreach($this->oauthRequestTokenParams as $key => $value) {	
 			$requestTokenRequest->set_parameter($key, $value);
-		}		
+		}
+
+		// got this from oauth playground, if not present, shows a yellow message warning
+		$requestTokenRequest->set_parameter('oauth_callback', $callbackUrl);
 
 		$requestTokenRequest->sign_request($this->signature, $this->consumerToken, NULL);
 		return CurlRequest::send($requestTokenRequest, 'GET', false, false);
@@ -306,6 +291,7 @@ class Orkut extends OrkutAuth {
 
 		$request = json_encode($this->message);
 		$headers = array("Content-Type: application/json");
+	
 		$signedUrl = $this->sign($request);
 		$ret = CurlRequest::send($signedUrl, 'POST', $request, $headers);
 		
@@ -315,7 +301,8 @@ class Orkut extends OrkutAuth {
 			$data[0]=$data[0].'}]';
 
 		
-		//print_r($ret);
+		// log data- TODO
+
 		return $this->mapData( json_decode($data[0],true) );
 	}
 	
@@ -333,10 +320,14 @@ class Orkut extends OrkutAuth {
 
 	public function executeCaptcha($captchaPage, $token) {
 
+		preg_match('/[0-9]+/',$captchaPage,$match);
+		$params = array('xid'=>$match[0]);
 		$signedUrl = $this->sign('','GET','http://www.orkut.com'.$captchaPage);
 		
 		$ret = CurlRequest::send($signedUrl, 'GET', false, false);
 		return $ret;
+		//print_r($ret);
+	
 	}
 }
 
