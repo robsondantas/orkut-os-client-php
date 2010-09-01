@@ -53,6 +53,10 @@ Orkut.prototype.click = function() {
 		else
 			this.sendMessage(uids, $("#msg").val());
 	}
+
+	if($("#call").val()=="listScrap") {	
+		this.listScraps();
+	}
 		
 }
 
@@ -157,7 +161,48 @@ Orkut.prototype.sendMessage = function(uids, amessage) {
 	}
 }
 
+Orkut.prototype.listScraps = function(){
 
+	// another way to solve it ?
+	var orkut = this;
+
+	$.ajax({
+		type:'POST',
+		url:'../list_scraps.php',
+		dataType: 'json',
+		success: function(json) {
+
+			var result = json[0]['id'];
+
+			if(result=="1") 
+				alert("error: " + json[0]['message']);
+			else if(result=="0") {
+
+				$("#result").html("");
+
+				var body="";
+				var from="";
+				var uid="";
+				var image="";
+
+				var data = json[1];
+
+				$.each(data['scraps']['data']['list'],function(i, item){
+
+					body = item['body'];
+					from = item['fromUserProfile']['name']['givenName'];
+					image = item['fromUserProfile']['thumbnailUrl'];
+					uid = item['fromUserProfile']['id'];
+					
+					orkut.printScrap(uid, image, from, body);
+
+				});
+			}
+
+
+		}
+	});
+}
 			
 Orkut.prototype.printUser = function(uid, firstName, lastName, image) {
 
@@ -171,6 +216,17 @@ Orkut.prototype.printUser = function(uid, firstName, lastName, image) {
 
 }
 
+Orkut.prototype.printScrap = function(uid, image, givenName, body) {
+
+	var html = "<div id='"+uid+"' class='user'>" +
+					"<div class='cont'><img src='" + image + "'></div>" +
+					"<p>Name: "+givenName+" - UID: " + uid + "</p>" +
+					"<p>Msg: " + body + "</p>" +
+				"</div>";
+		
+	$("#result").html( $("#result").html() + html);
+
+}
 
 Orkut.prototype.sel = function(user) {
 
