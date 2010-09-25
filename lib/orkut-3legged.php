@@ -72,9 +72,16 @@ class OrkutAuth {
 	const AUTHORIZE_URL = 'https://www.google.com/accounts/OAuthAuthorizeToken';
 	const ACCESS_TOKEN_URL = 'https://www.google.com/accounts/OAuthGetAccessToken';
 	const REST_ENDPOINT = 'http://sandbox.orkut.com/social/rest/';
-	const RPC_ENDPOINT = 'http://www.orkut.com/social/rpc';
 
+	/** production 
+	const RPC_ENDPOINT = 'http://www.orkut.com/social/rpc';
 	protected $oauthRequestTokenParams = array('scope' => 'http://orkut.gmodules.com/social');
+	*/
+
+	/** sandbox */
+	const RPC_ENDPOINT = 'http://sandbox.orkut.com/social/rpc';
+	protected $oauthRequestTokenParams = array('scope' => 'http://sandbox.orkut.gmodules.com/social');
+	
 
 	protected $consumerToken;
 	protected $signature;
@@ -168,7 +175,10 @@ class OrkutAuth {
 		$accessRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, $accessToken, 'GET', self::ACCESS_TOKEN_URL, array());
 		$accessRequest->set_parameter('oauth_verifier',$_GET['oauth_verifier']);
 		$accessRequest->sign_request($this->signature, $this->consumerToken, $accessToken);
-		return CurlRequest::send($accessRequest, 'GET', false, false);
+
+		$header = $this->getOAuthHeader($accessRequest);
+
+		return CurlRequest::send($accessRequest, 'GET', false, $header);
 	}
 	
 
@@ -202,15 +212,36 @@ class OrkutAuth {
 
 	protected function requestRequestToken($callbackUrl) {
 		$requestTokenRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, NULL, "GET", self::REQUEST_TOKEN_URL, $this->oauthRequestTokenParams);
+
 		foreach($this->oauthRequestTokenParams as $key => $value) {	
 			$requestTokenRequest->set_parameter($key, $value);
 		}
 
 		// got this from oauth playground, if not present, shows a yellow message warning
 		$requestTokenRequest->set_parameter('oauth_callback', $callbackUrl);
-
 		$requestTokenRequest->sign_request($this->signature, $this->consumerToken, NULL);
-		return CurlRequest::send($requestTokenRequest, 'GET', false, false);
+
+		$header = $this->getOAuthHeader($requestTokenRequest);
+
+		return CurlRequest::send($requestTokenRequest, 'GET', false, $header);
+	}
+
+	protected function getOAuthHeader($request) {
+
+		$header="Authorization: OAuth ";
+
+		foreach($request->parameters as $k=>$v) {
+
+			if($k!="scope")			
+				// concatenate oauth header
+				$header.=$k."=\"".$v."\", ";
+		}
+
+		if(substr($header, strlen($header)-2, 2)==", ")
+			$header=substr($header, 0, strlen($header)-2);
+
+		return $header;
+		
 	}
 	
 	protected function sign($postBody, $method='POST', $url='', $params=array()) {
