@@ -31,12 +31,15 @@ class CurlRequest {
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_HEADER, true);
+		curl_setopt($ch, CURLINFO_HEADER_OUT, true);
 
 		if ($headers && is_array($headers)) {
 			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		}
 
 		$data = @curl_exec($ch);
+
+
 		$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		$errno = @curl_errno($ch);
 		$error = @curl_error($ch);
@@ -73,15 +76,15 @@ class OrkutAuth {
 	const ACCESS_TOKEN_URL = 'https://www.google.com/accounts/OAuthGetAccessToken';
 	const REST_ENDPOINT = 'http://sandbox.orkut.com/social/rest/';
 
-	/** production 
+	/* production */
 	const RPC_ENDPOINT = 'http://www.orkut.com/social/rpc';
-	protected $oauthRequestTokenParams = array('scope' => 'http://orkut.gmodules.com/social');
-	*/
+	protected $oauthRequestTokenParams = array('scope' => 'http://orkut.gmodules.com/social/');
 
-	/** sandbox */
+
+	/** sandbox 
 	const RPC_ENDPOINT = 'http://sandbox.orkut.com/social/rpc';
 	protected $oauthRequestTokenParams = array('scope' => 'http://sandbox.orkut.gmodules.com/social');
-	
+	*/
 
 	protected $consumerToken;
 	protected $signature;
@@ -176,9 +179,11 @@ class OrkutAuth {
 		$accessRequest->set_parameter('oauth_verifier',$_GET['oauth_verifier']);
 		$accessRequest->sign_request($this->signature, $this->consumerToken, $accessToken);
 
+		//echo $accessRequest->base_string."--";
 		$header = $this->getOAuthHeader($accessRequest);
+		//print_r($header);
 
-		return CurlRequest::send($accessRequest, 'GET', false, $header);
+		return CurlRequest::send(self::ACCESS_TOKEN_URL, 'GET', false, $header);
 	}
 	
 
@@ -219,20 +224,24 @@ class OrkutAuth {
 
 		// got this from oauth playground, if not present, shows a yellow message warning
 		$requestTokenRequest->set_parameter('oauth_callback', $callbackUrl);
+
 		$requestTokenRequest->sign_request($this->signature, $this->consumerToken, NULL);
 
 		$header = $this->getOAuthHeader($requestTokenRequest);
 
-		return CurlRequest::send($requestTokenRequest, 'GET', false, $header);
+
+		return CurlRequest::send(self::REQUEST_TOKEN_URL.'?scope='.$this->oauthRequestTokenParams['scope'], 'GET', false, $header);
 	}
 
 	protected function getOAuthHeader($request) {
 
 		$header="Authorization: OAuth ";
-
 		foreach($request->parameters as $k=>$v) {
 
-			if($k!="scope")			
+			//if($k=='oauth_callback')
+				$v = urlencode($v);
+
+			if($k!='scope')			
 				// concatenate oauth header
 				$header.=$k."=\"".$v."\", ";
 		}
@@ -240,11 +249,11 @@ class OrkutAuth {
 		if(substr($header, strlen($header)-2, 2)==", ")
 			$header=substr($header, 0, strlen($header)-2);
 
-		return $header;
+		return array($header);
 		
 	}
 	
-	protected function sign($postBody, $method='POST', $url='', $params=array()) {
+	protected function sign2($postBody, $method='POST', $url='', $params=array()) {
 		if($url=='')		
 			$url = self::RPC_ENDPOINT;
 
@@ -273,6 +282,37 @@ class OrkutAuth {
 		// return the signed url
 		return $oauthRequest->to_url();
 	}
+
+	protected function sign($postBody, $method='POST', $url='', $params=array()) {
+		if($url=='')		
+			$url = self::RPC_ENDPOINT;
+
+		$headers = array("Content-Type: application/json");
+		
+		// add some parameters used to sign the request
+		$params['oauth_nonce'] = md5(microtime() . mt_rand());
+		$params['oauth_version'] = OAuthRequest::$version;
+		$params['oauth_timestamp'] = time();
+		$params['oauth_consumer_key'] = $this->consumerToken->key;
+
+		if ($this->accessToken != null) {
+			$params['oauth_token'] = $this->accessToken->key;
+		}
+		
+		if($method=='POST') {		
+			// compute our body hash, base64 + sha1
+			$bodyHash = base64_encode(sha1($postBody, true));
+			$params['oauth_body_hash'] = $bodyHash;
+		}
+		
+		// create the oauth request
+		$oauthRequest = OAuthRequest::from_request($method, $url, $params);
+		$oauthRequest->sign_request($this->signature, $this->consumerToken, $this->accessToken);
+		
+		// return the signed url
+		return $this->getOAuthHeader($oauthRequest);
+	}
+
 }
 
 class Orkut extends OrkutAuth {
@@ -321,9 +361,10 @@ class Orkut extends OrkutAuth {
 	
 
 		$request = json_encode($this->message);
-		$headers = array("Content-Type: application/json");
+		$signedUrl = $this->sign2($request);
+
+		$headers = array("Content-Type: application/json", $signedUrl[0]);
 	
-		$signedUrl = $this->sign($request);
 		$ret = CurlRequest::send($signedUrl, 'POST', $request, $headers);
 		
 		//fix return bug
