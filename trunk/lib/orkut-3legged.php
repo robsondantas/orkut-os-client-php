@@ -16,8 +16,7 @@ class CurlRequest {
 		);
 
 		// log here
-		//echo $request;
-
+	//	echo $request;
 		curl_setopt($ch, CURLOPT_URL, $url);
 
 		if ($postBody) {
@@ -63,7 +62,7 @@ class CurlRequest {
 		$response = array('http_code' => $http_code, 'data' => $response_body, 'headers' => $headers);
 
 		//log here		
-		//echo $response;
+		//print_r($response);
 
 		return $response;
 	}
@@ -104,7 +103,6 @@ class OrkutAuth {
 	 * 4- after getting access token, redirect back to the url which originally sent the auth process.
 	 */
 	public function login() {
-
 		// do we have an active token in the session ?
 		if($this->getAccessToken()!=null) {	
 			$this->accessToken = $this->getAccessToken();
@@ -133,6 +131,9 @@ class OrkutAuth {
 			// ok, now we are almost done, just upgrade request token and redirect
 			else {
 
+				if(!isset($_SESSION['orkut_key']))
+					throw new Exception('session expired, login again.');
+
 				$this->upgradeRequestToken($_SESSION['orkut_key'], $_SESSION['orkut_secret']);
 
 				// ok, finally we are ready to go.
@@ -153,6 +154,8 @@ class OrkutAuth {
 	}
 
 	protected function upgradeRequestToken($requestToken, $requestTokenSecret) {
+
+		$requestTokenSecret = str_replace(' ','+',$requestTokenSecret);
 		$ret = $this->requestAccessToken($requestToken, $requestTokenSecret);
 
 		if ($ret['http_code'] == '200') {
@@ -166,6 +169,10 @@ class OrkutAuth {
 
 			// The token was upgraded to an access token, we can now continue to use it.
 			$this->accessToken = new OAuthConsumer(urldecode($matches['oauth_token']), urldecode($matches['oauth_token_secret']));
+
+			// normalize our token
+			$this->accessToken->secret = str_replace(' ','+',OAuthUtil::urldecode_rfc3986($this->accessToken->secret));
+
 			return $this->accessToken;
 		} 
 		else {
@@ -174,14 +181,13 @@ class OrkutAuth {
 	}
 
 	protected function requestAccessToken($requestToken, $requestTokenSecret) {
+
 		$accessToken = new OAuthConsumer($requestToken, $requestTokenSecret);
 		$accessRequest = OAuthRequest::from_consumer_and_token($this->consumerToken, $accessToken, 'GET', self::ACCESS_TOKEN_URL, array());
 		$accessRequest->set_parameter('oauth_verifier',$_GET['oauth_verifier']);
 		$accessRequest->sign_request($this->signature, $this->consumerToken, $accessToken);
 
-		//echo $accessRequest->base_string."--";
 		$header = $this->getOAuthHeader($accessRequest);
-		//print_r($header);
 
 		return CurlRequest::send(self::ACCESS_TOKEN_URL, 'GET', false, $header);
 	}
@@ -236,10 +242,9 @@ class OrkutAuth {
 	protected function getOAuthHeader($request) {
 
 		$header="Authorization: OAuth ";
-		foreach($request->parameters as $k=>$v) {
+		foreach($request->get_parameters() as $k=>$v) {
 
-			//if($k=='oauth_callback')
-				$v = urlencode($v);
+			$v = OAuthUtil::urlencode_rfc3986($v);
 
 			if($k!='scope')			
 				// concatenate oauth header
@@ -361,11 +366,14 @@ class Orkut extends OrkutAuth {
 	
 
 		$request = json_encode($this->message);
-		$signedUrl = $this->sign2($request);
 
-		$headers = array("Content-Type: application/json", $signedUrl[0]);
-	
-		$ret = CurlRequest::send($signedUrl, 'POST', $request, $headers);
+		//$signedUrl = $this->sign2($request);
+		//$headers = array("Content-Type: application/json", $signedUrl[0]);
+		//$ret = CurlRequest::send($signedUrl, 'POST', $request, $headers);
+
+		$headers = $this->sign($request);
+		$headers[] = "Content-Type: application/json";
+		$ret = CurlRequest::send(self::RPC_ENDPOINT, 'POST', $request, $headers);
 		
 		//fix return bug
 		$data = explode('}]{"',$ret['data']);
@@ -394,7 +402,8 @@ class Orkut extends OrkutAuth {
 
 		preg_match('/[0-9]+/',$captchaPage,$match);
 		$params = array('xid'=>$match[0]);
-		$signedUrl = $this->sign('','GET','http://www.orkut.com'.$captchaPage);
+
+		$signedUrl = $this->sign2('','GET','http://www.orkut.com'.$captchaPage);
 		
 		$ret = CurlRequest::send($signedUrl, 'GET', false, false);
 		return $ret;
