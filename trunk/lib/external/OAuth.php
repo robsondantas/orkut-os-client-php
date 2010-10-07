@@ -13,7 +13,7 @@ class OAuthConsumer {/*{{{*/
 
   function __construct($key, $secret, $callback_url=NULL) {/*{{{*/
     $this->key = $key;
-    $this->secret = str_replace(" ","",$secret);
+    $this->secret = $secret;
     $this->callback_url = $callback_url;
   }/*}}}*/
 
