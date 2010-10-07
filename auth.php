@@ -37,8 +37,9 @@ else{
 		$orkutApi->login();
 	}
 	catch(Exception $e) {
+		//print_r($e);
 		$_SESSION['oauth_token']='';
-		GenericError::stop(1,'Cant authenticate on Orkut');
+		GenericError::stop(1,'Cant authenticate on Orkut. Message: '.$e->getMessage());
 	}
 }
 ?>
