@@ -11,3 +11,7 @@
   * Add and improve log routines
   * Create a feature checking page, to determine if the hosting is capable of running this library (most issues related to curl and safe_mode)
   * Create a way to authenticate an user without needing to open the browser page. This might be done hacking around curl, too.
+
+= Wishlist =
+
+Want a new feature ? Open a issue a let us now on our [http://http://groups.google.com/group/orkut-php-client group]
