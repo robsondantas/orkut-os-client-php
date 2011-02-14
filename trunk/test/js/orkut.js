@@ -67,7 +67,7 @@ Orkut.prototype.showUsers = function() {
 
 	$.ajax({
 		type:'POST',
-		url:'../list_friends.php',
+		url:'../json/list_friends.php',
 		dataType: 'json',
 		success: function(json) {
 
@@ -125,7 +125,7 @@ Orkut.prototype.sendMessage = function(uids, amessage) {
 
 	$.ajax({
 		type: 'POST',
-		url: '../send_scrap.php',
+		url: '../json/send_scrap.php',
 		data: extraData + 'uids=' + uids + '&message=' + encodeURIComponent(amessage),
 		dataType: 'json',
 		success: function(json) {
@@ -168,7 +168,7 @@ Orkut.prototype.listScraps = function(){
 
 	$.ajax({
 		type:'POST',
-		url:'../list_scraps.php',
+		url:'../json/list_scraps.php',
 		dataType: 'json',
 		success: function(json) {
 
