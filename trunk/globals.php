@@ -15,7 +15,7 @@ define('g_captcha_handler', '/os-php/captcha.php');
 define('g_calback_direct_handler', '/os-php/callback_direct.php');
 
 // set include path 
-set_include_path(get_include_path() . PATH_SEPARATOR . g_base_dir.'/lib');
+set_include_path(get_include_path() . PATH_SEPARATOR . g_base_dir);
 
 // Set the default timezone since many servers won't have this configured
 date_default_timezone_set(g_timezone);
@@ -24,7 +24,7 @@ date_default_timezone_set(g_timezone);
 ini_set('error_reporting', E_ALL | E_STRICT);
 
 // main requires
-require_once 'orkut-3legged.php';
-require_once g_base_dir.'/utils/error.php';
+require_once 'lib/orkut-3legged.php';
+require_once 'utils/error.php';
 
 ?>
