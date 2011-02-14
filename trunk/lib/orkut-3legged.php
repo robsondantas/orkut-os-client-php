@@ -48,7 +48,14 @@ class CurlRequest {
 			throw new Exception("HTTP Error: " . $error);
 		}
 
-		list($raw_response_headers, $response_body) = explode("\r\n\r\n", $data, 2);
+            
+        list($raw_response_headers, $response_body) = explode("\r\n\r\n", $data, 2);
+        
+        // fix proxy issue, sending http/1.1 100 continue, instead of giving a full header.
+        if(strtolower($raw_response_headers)=='http/1.1 100 continue'){
+            list($raw_response_headers, $response_body) = explode("\r\n\r\n", $response_body, 2);
+        }
+        
 		$response_header_lines = explode("\r\n", $raw_response_headers);
 		array_shift($response_header_lines);
 		$response_headers = array();
